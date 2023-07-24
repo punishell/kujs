@@ -1,0 +1,3 @@
+# kujs
+
+`node testnet.js `
