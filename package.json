@@ -1,19 +1,12 @@
-{
-  "name": "kujs",
+  "name": "kujira-demo",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "node index.js"
-  },
-  "author": "",
-  "license": "ISC",
+  "type": "module",
+  "license": "MIT",
   "dependencies": {
-    "@cosmjs/cosmwasm-stargate": "^0.28.13",
-    "@cosmjs/launchpad": "^0.27.1",
-    "@cosmjs/math": "^0.28.13",
-    "@cosmjs/proto-signing": "^0.28.13",
-    "@cosmjs/stargate": "^0.28.13",
-    "kujira.js": "git+https://github.com/Team-Kujira/kujira.js.git"
+    "@cosmjs/cosmwasm-stargate": "^0.28.9",
+    "@cosmjs/proto-signing": "^0.28.9",
+    "@cosmjs/stargate": "^0.28.9",
+    "kujira.js": "Team-Kujira/kujira.js.git#9f89ec5b2506fb6a4eee225ff26f528b4cb552ec"
   }
 }
