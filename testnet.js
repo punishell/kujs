@@ -1,57 +1,112 @@
-// import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
-let protoSigning = require("@cosmjs/proto-signing");
-
-// import { assertIsBroadcastTxSuccess, SigningStargateClient, StargateClient } from "@cosmjs/stargate";
-let stargate = require("@cosmjs/cosmwasm-stargate");
-let fs = require("fs");
-
-
-(async function() {
-const rpcEndpoint = "https://test-rpc-kujira.mintthemoon.xyz/";
+import { tx, registry } from "kujira.js";
+import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
+import { CosmWasmClient,  SigningCosmWasmClient} from "@cosmjs/cosmwasm-stargate";
+import { coins, SigningStargateClient, GasPrice } from "@cosmjs/stargate";
+import { readFileSync } from 'fs';
 
 
-//alice
-const alice_mnemonic = "unfold donate hazard vital behind still beyond carbon eagle budget plate federal";
-const alice_wallet = await protoSigning.DirectSecp256k1HdWallet.fromMnemonic(alice_mnemonic,{prefix: 'kujira'});
-const alice = await alice_wallet.getAccounts();
-const alice_clientOption = {
-  gasPrice: {
-    // roadcastTimeoutMs: 60 * 1000,
-    amount: '1',
-    denom: 'ukuji'
+// let stargate2 = require("@cosmjs/cosmwasm-stargate");
+
+const RPC_ENDPOINT = "https://kujira-testnet-rpc.polkachu.com";
+
+
+const MNEMONIC = "...";
+
+const signer = await DirectSecp256k1HdWallet.fromMnemonic(MNEMONIC, {
+  prefix: "kujira",
+});
+
+const [account] = await signer.getAccounts();
+
+const client = await SigningStargateClient.connectWithSigner(
+  RPC_ENDPOINT,
+  signer,
+  {
+    registry,
+    gasPrice: GasPrice.fromString("0.00125ukuji"),
   }
+);
+
+
+function getId(result){
+  const log = JSON.parse(result.rawLog);
+  let codeId = null;
+
+  for (const event of log[0].events) {
+    if (event.type === 'store_code') {
+      for (const attribute of event.attributes) {
+        if (attribute.key === 'code_id') {
+          codeId = attribute.value;
+          break;
+        }
+      }
+    }
+    if (codeId) break;
+  }
+
+  return codeId
 }
-const alice_client = await stargate.SigningCosmWasmClient.connectWithSigner(rpcEndpoint, alice_wallet,alice_clientOption);
 
-// alice_client.chainId = 'harpoon-4';
+const query_client = await SigningCosmWasmClient.connectWithSigner(RPC_ENDPOINT, signer, {
+  registry,
+  gasPrice: GasPrice.fromString("0.00125ukuji"),
+})
 
-console.log("Alice:");
-console.log(alice[0].address);
-
-console.log(await alice_client.getChainId());
-console.log(await alice_client.getBalance(alice[0].address,"ukuji"));
-
-offer_addr="kujira1h7g5u3lr5j74hcsfrrls4anauv7u72a94cppyscl32rqm5lzz7psu4438v";
-trade_addr = "kujira13lg50j2hak2quzax2xvt6sjk6j7s73ljzvvrv95cjjcur95z62cstl3qqj"
+///Upload contract
+const ghost_wasm = await readFileSync('/../ghost.wasm');
+const ghost_msg = tx.wasm.msgStoreCode({sender: account.address,wasm_byte_code:ghost_wasm });
+console.log(ghost_msg)
+const ghost_upload_result = await client.signAndBroadcast(account.address, [ghost_msg], "auto");
+console.log(ghost_upload_result) 
 
 
+ let ghost_id = getId(ghost_upload_result);
 
-console.log('update TRADE as: ' + alice[0].address);
-const fund_trade_result = await alice_client.execute(alice[0].address, offer_addr, {
-  "update_offer": {
-    "offer_update": {
-      "id": "102_28",
-      "state": "active",
-      "rate": "102",
-      "min_amount": "10000000",
-      "max_amount": "200000000",
-      "description": "TBA"
+
+console.log(ghost_id)
+
+
+const instantiate_ghos = tx.wasm.msgInstantiateContract({
+  sender: account.address, 
+  admin: account.address, 
+  code_id: ghost_id, 
+  label:"ghost", 
+  msg:Buffer.from(JSON.stringify({ owner: account.address}))
+})
+const instantiate_result = await client.signAndBroadcast(account.address, [instantiate_ghos], "auto");
+
+
+const log1 = JSON.parse(instantiate_result.rawLog);
+let ghost_addr = null;
+
+for (const event of log1[0].events) {
+  if (event.type === 'instantiate') {
+    for (const attribute of event.attributes) {
+      if (attribute.key === '_contract_address') {
+        ghost_addr = attribute.value;
+        break;
+      }
     }
   }
-},"auto",undefined)
+  if (ghost_addr) break;
+}
 
-console.log(JSON.stringify(fund_trade_result));
-
-})();
+console.log(ghost_addr); 
 
 
+const demo_denom = "factory/kujira1ltvwg69sw3c5z99c6rr08hal7v0kdzfxz07yj5/demo"
+
+// // DEPOSIT TO GHOST
+let msg_deposit = tx.wasm.msgExecuteContract({
+  sender: account.address,
+  contract: ghost_addr,
+  msg: Buffer.from(JSON.stringify({ execute:{deposit: {debt_denom: "factory/kujira1r85reqy6h0lu02vyz0hnzhv5whsns55gdt4w0d7ft87utzk7u0wqr4ssll/uusk" } }})),
+
+  funds: coins(4930092, demo_denom),
+});
+console.log(await client.signAndBroadcast(account.address, [msg_deposit], "auto"));
+
+
+let query_result = await query_client.queryContractSmart(addr,{config:{}});
+
+console.log(query_result)
